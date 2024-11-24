@@ -1,0 +1,7 @@
+info = { name = "Valid" }
+
+config = [ { target = "tests/valid/targets/config.conf" }]
+localconfig = [ { target = "tests/valid/targets/config.conf", overwrite = false }]
+data = [ {target = "tests/valid/targets/1.txt", alias = "one.txt" }, { target = "tests/valid/targets/2.txt" }]
+bin = [ { target = "tests/valid/targets/executable.bin", strip_ext = true, perms = 0x755 }]
+
