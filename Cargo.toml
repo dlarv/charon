@@ -1,0 +1,8 @@
+[package]
+name = "charon"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+mythos-core = { version = "2.0.0", path = "../mythos-core" }
+toml = "0.8.19"
