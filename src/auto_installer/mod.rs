@@ -177,6 +177,8 @@ fn parse_util_name(path: &PathBuf) -> Option<String> {
 mod tests {
     use std::env;
 
+    use serial_test::serial;
+
     use super::*;
 
     #[test]
@@ -220,6 +222,7 @@ mod tests {
         println!("{res}");
         assert!(matches!(res, CharonIoError::NoTargetProvided(_)));
     }
+    #[serial]
     #[test]
     fn valid_charon_file() {
         unsafe {
@@ -278,6 +281,7 @@ mod tests {
             assert!(items.contains(&item));
         }
     }
+    #[serial]
     #[test]
     fn empty_dir_field() {
         unsafe {

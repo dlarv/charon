@@ -1,0 +1,5 @@
+data = [ 
+	{target = "tests/main/orphan_test/Path1"},
+	{target = "tests/main/orphan_test/Path2"},
+	{target = "tests/main/orphan_test/Path3/Item1"},
+]

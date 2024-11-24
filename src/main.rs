@@ -99,6 +99,26 @@ fn main() {
 fn install(cmd: InstallationCmd, do_dry_run: bool) -> Vec<String> {
     let mut charon_index: Vec<String> = Vec::new();
 
+    charon_index.push("# Directories".to_string());
+    for dir in cmd.mkdirs {
+        charon_index.push(dir.to_string_lossy().to_string());
+
+        if dir.exists() {
+            printinfo!("Directory already exists: {dir:?}");
+            charon_index.push("# Directory already exists: {dir:?}".into());
+            continue;
+        } 
+
+        printinfo!("Created directory: {dir:?}");
+
+        if !do_dry_run {
+            if let Err(err) = fs::create_dir_all(&dir) {
+                printerror!("An error occurred while trying to make directory. Error = {err}.");
+            }
+        }
+    }
+
+    charon_index.push("# Files".to_string());
     for mut item in cmd.items {
         printinfo!("Installing {:?} --> {:?}", item.target, item.dest);
 
@@ -197,41 +217,71 @@ fn process_orphans(old_index: Vec<String>, new_index: &Vec<String>, do_dry_run: 
 }
 
 fn uninstall(util: Option<String>) {
+
 }
 
 #[cfg(test)]
 mod tests {
     use std::env;
+    use serial_test::serial;
+
     use super::*;
 
     fn setup1() {
         unsafe {
-            env::set_var("MYTHOS_CONFIG_DIR", "tests/valid/dests/etc");
-            env::set_var("MYTHOS_LOCAL_CONFIG_DIR", "tests/valid/dests/config");
-            env::set_var("MYTHOS_BIN_DIR", "tests/valid/dests/bin");
-            env::set_var("MYTHOS_DATA_DIR", "tests/valid/dests/data");
+            env::set_var("MYTHOS_CONFIG_DIR", "tests/main/dests/etc");
+            env::set_var("MYTHOS_LOCAL_CONFIG_DIR", "tests/main/dests/config");
+            env::set_var("MYTHOS_BIN_DIR", "tests/main/dests/bin");
+            env::set_var("MYTHOS_DATA_DIR", "tests/main/dests/data");
         }
     }
+    #[serial]
     #[test]
     fn overwrite() {
         setup1();
         let cmd = parse_installation_file(&PathBuf::from("tests/main/overwrite.charon")).unwrap();
         let res = install(cmd, false);
+
+        let mut counter = 0;
+        for item in res {
+            if item.contains("File exists && !overwrite") {
+                counter += 1;
+            }
+        }
+        assert_eq!(counter, 1);
+        fs::remove_file("tests/main/dests/data/overwrite/overwrite2.txt").unwrap();
+        assert!(!PathBuf::from("tests/main/dests/data/overwrite/overwrite2.txt").exists());
     }
-    #[test]
-    fn no_overwrite() {
-    }
-    #[test]
-    fn invalid_permissions() {
-    }
+    #[serial]
     #[test]
     fn load_old_index() {
+        setup1();
+        let res = read_index("util1", true).unwrap();
+        assert!(res.len() == 3);
     }
+    #[serial]
     #[test]
     fn read_old_index_dne() {
+        let res = read_index("util2", true).unwrap();
+        assert!(res.is_empty());
     }
+    #[serial]
     #[test]
     fn remove_orphans() {
+        setup1();
+        let old_index = read_index("orphan_test", true).unwrap();
+        let cmd = parse_installation_file(&PathBuf::from("tests/main/orphan_test.charon")).unwrap();
+        let new_index = install(cmd, true);
+
+        println!("{new_index:?}");
+        println!("{old_index:?}");
+        let orphans = process_orphans(old_index, &new_index, true);
+
+        println!("{orphans:?}");
+        assert!(orphans.contains(&PathBuf::from("tests/main/dests/data/orphan_test/Orphan1")));
+        assert!(orphans.contains(&PathBuf::from("tests/main/dests/data/orphan_test/Orphan2")));
+        assert!(orphans.contains(&PathBuf::from("tests/main/dests/data/orphan_test/Orphan3/Item1")));
+        assert_eq!(orphans.len(), 3);
     }
     #[test]
     fn uninstall() {
