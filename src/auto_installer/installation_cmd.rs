@@ -18,11 +18,11 @@ impl InstallationCmd {
             description: None,
         };
     }
-    pub fn set_name(&mut self, name: &str) {
-        self.name = name.into();
-    }
     pub fn set_info(&mut self, val: &Value) {
         //! Get version, description, source, etc from info section of a .charon file.
+        if let Some(Value::String(val)) = val.get("name") {
+            self.name = val.to_string();
+        }
         if let Some(Value::String(val)) = val.get("version") {
             self.version = Some(val.to_string());
         }

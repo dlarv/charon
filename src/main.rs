@@ -65,8 +65,7 @@ fn main() {
     let new_charon_index = install(cmd, do_dry_run);
 
     // Load old charon file, if it exists.
-    printinfo!("\nReading index file.");
-    let old_charon_index = match read_index(&util_name, do_dry_run) {
+    let old_charon_index = match read_util_index(&util_name, do_dry_run) {
         Ok(file) => file,
         // Fails if fs error occurs.
         // read_index() takes care of logging this error.
@@ -81,7 +80,10 @@ fn main() {
         PathBuf::from(format!("{util_name}.dryrun.charon"))
     } else {
         match get_util_index_path(do_dry_run) {
-            Some(path) => path.with_file_name(util_name).with_extension("charon"),
+            Some(mut path) => {
+                path.push(util_name + ".charon");
+                path
+            },
             None => {
                 printerror!("Due to an error while trying to access util index, index file was saved as if this were a dryrun.");
                 PathBuf::from(format!("{util_name}.dryrun.charon"))
@@ -91,12 +93,11 @@ fn main() {
 
     // TODO: Write to index.charon.
 
+    println!("\nUpdating index file: {charon_index_path:?}");
     if let Err(err) = fs::write(&charon_index_path, new_charon_index.join("\n")) {
         printerror!("An error occurred while writing charon file. Error = {err}.");
         return;
     }
-
-    
 
     printinfo!("Installation complete!");
 }
@@ -159,7 +160,7 @@ fn get_util_index_path(do_dry_run: bool) -> Option<PathBuf> {
     return Some(path);
 }
 
-fn read_index(util_name: &str, do_dry_run: bool) -> Result<Vec<String>, ()> {
+fn read_util_index(util_name: &str, do_dry_run: bool) -> Result<Vec<String>, ()> {
     //! Read file inside $MYTHOS_DATA_DIR/$util_name.charon
     // make_dir works the same as get_path, except it creates the dir if it dne.
     let mut path = match get_util_index_path(do_dry_run) {
@@ -261,20 +262,20 @@ mod tests {
     #[test]
     fn load_old_index() {
         setup1();
-        let res = read_index("util1", true).unwrap();
+        let res = read_util_index("util1", true).unwrap();
         assert!(res.len() == 3);
     }
     #[serial]
     #[test]
     fn read_old_index_dne() {
-        let res = read_index("util2", true).unwrap();
+        let res = read_util_index("util2", true).unwrap();
         assert!(res.is_empty());
     }
     #[serial]
     #[test]
     fn remove_orphans() {
         setup1();
-        let old_index = read_index("orphan_test", true).unwrap();
+        let old_index = read_util_index("orphan_test", true).unwrap();
         let cmd = parse_installation_file(&PathBuf::from("tests/main/orphan_test.charon")).unwrap();
         let new_index = install(cmd, true);
 
