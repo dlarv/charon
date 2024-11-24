@@ -1,6 +1,6 @@
-use std::path::PathBuf;
+use std::{fs, os::unix::fs::PermissionsExt, path::PathBuf};
 
-use super::InstallItem;
+use super::{CharonInstallError, InstallItem};
 
 impl InstallItem {
     pub fn new() -> InstallItem {
@@ -9,54 +9,59 @@ impl InstallItem {
             dest: PathBuf::new(),
             perms: 0,
             strip_ext: false,
-            alias: None,
             overwrite: true,
             comment: "".into(),
         };
     }
-    pub fn target(&mut self, target: PathBuf) -> &mut InstallItem {
-        self.target = target;
-        return self;
-    }
-    pub fn perms(&mut self, val: u32) -> &mut InstallItem {
-        self.perms = val;
-        return self;
-    }
-    pub fn strip_ext(&mut self, val: bool) -> &mut InstallItem {
-        self.strip_ext = val;
-        return self;
-    }
-    pub fn overwrite(&mut self, val: bool) -> &mut InstallItem {
-        self.overwrite = val;
-        return self;
-    }
-    pub fn comment(&mut self, val: String) -> &mut InstallItem {
-        self.comment = val;
-        return self;
-    }
     pub fn print_dest(&self) -> String {
         return self.dest.to_string_lossy().to_string();
     }
-    pub fn to_toml_str(&self) -> String {
-        let mut output = format!("{{ target = {:?}", self.target);
 
-        if self.perms > 0 {
-            output += &format!(", perms = {}", self.perms);
-        }
-        if self.strip_ext {
-            output += ", strip_ext = true";
-        }
-        if !self.overwrite {
-            output += ", overwrite = true";
-        }
-        if let Some(alias) = &self.alias {
-            output += &format!(", alias = {alias:?}");
-        }
+    pub fn try_install(&mut self, do_dry_run: bool) -> Result<(), CharonInstallError> {
+        // GenericIoError >> BadPermissions >> NoOverwrite >> DryRun
+        let mut comment = vec!["#".to_string()];
+        // Init error code.
+        let mut err = if do_dry_run {
+            Some(CharonInstallError::DryRun)
+        } else {
+            None
+        };
+
+        // If part of comment was declared in charon file, copy it over now.
         if self.comment.len() > 0 {
-            output += &format!(", comment = {:?}", self.comment);
+            comment.push(self.comment.to_string());
         }
-        output += "}";
-        return output;
+
+        if self.dest.exists() && !self.overwrite {
+            comment.push("File exists && !overwrite".into());
+            err = Some(CharonInstallError::FileExistsNoOverwrite);
+
+        } else if !do_dry_run {
+            match fs::copy(&self.target, &self.dest) {
+                Ok(_) => {
+                    comment.push("Successfully installed".into());
+                    match self.dest.metadata() {
+                        Ok(metadata) => metadata.permissions().set_mode(self.perms),
+                        Err(msg) => {
+                            comment.push(format!("Error changing permissions for {:?}. {msg}.", self.dest));
+
+                            err = Some(CharonInstallError::BadPermissions(msg));
+                        }
+                    }
+                },
+                Err(msg) => {
+                    comment.push(format!("Could not copy file: {msg}"));
+                    err = Some(CharonInstallError::GenericIoError(msg));
+                }
+            }
+        }
+
+        self.comment = comment.join("; ");
+
+        if let Some(err) = err {
+            return Err(err);
+        }
+        return Ok(());
     }
 }
 

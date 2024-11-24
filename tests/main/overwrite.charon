@@ -1,0 +1,1 @@
+data = [ { target = "tests/main/targets/overwrite1.txt", overwrite = true }, { target = "tests/main/targets/overwrite2.txt", overwrite = true } ]

@@ -5,7 +5,7 @@ use toml::Value;
 
 use crate::auto_installer::InstallItem;
 
-use super::InstallationCmd;
+use super::{CharonIoError, InstallationCmd};
 
 impl InstallationCmd {
     pub fn new() -> InstallationCmd {
@@ -33,13 +33,15 @@ impl InstallationCmd {
             self.source = Some(val.to_string());
         }
     }
-    pub fn add_item(&mut self, parent: &PathBuf, dest: &PathBuf, val: &Value) {
+    pub fn add_item(&mut self, parent: &PathBuf, dest: &PathBuf, val: &Value, line_num: usize) -> Result<(), CharonIoError>{
+        //! Returns Ok if install item was added correctly.
+        //! Returns Err if there was a CharonIoError::InvalidInstallItem.
+        //! That error is not created in here, b/c this function doesn't know the line number.
         let mut cmd = InstallItem {
             target: parent.into(),
             dest: dest.into(),
             perms: 000,
             strip_ext: false,
-            alias: None,
             overwrite: true,
             comment: "".into(),
         };
@@ -47,18 +49,29 @@ impl InstallationCmd {
             Value::String(v) => {
                 cmd.dest = v.into();
                 self.items.push(cmd);
-                return;
+                return Ok(());
             },
             Value::Table(table) => {
                 table
             },
-            _ => return,
+            _ => return Err(CharonIoError::InvalidInstallItem(val.to_string(), line_num))
         };
+
         let mut dest = None;
+        let mut alias: Option<PathBuf> = None;
+
+        // Resolve target path and ensure it exists.
         if let Some(Value::String(val)) = table.get("target") {
             // cmd.target = val.into();
             cmd.target = parent.join(&val).canonicalize().unwrap_or(val.into());
+        } else {
+            return Err(CharonIoError::NoTargetProvided(line_num));
         }
+        if !cmd.target.exists() {
+            return Err(CharonIoError::TargetFileNotFound(cmd.target.into(), line_num));
+        }
+
+
         if let Some(Value::String(val)) = table.get("dest") {
             dest = Some(PathBuf::from(val));
         }
@@ -69,7 +82,7 @@ impl InstallationCmd {
             cmd.strip_ext = val.to_owned();
         }
         if let Some(Value::String(val)) = table.get("alias") {
-            cmd.alias = Some(val.into());
+            alias = Some(val.into());
         }
         if let Some(Value::Boolean(val)) = table.get("overwrite") {
             cmd.overwrite = val.to_owned();
@@ -78,21 +91,26 @@ impl InstallationCmd {
             cmd.comment = val.to_owned();
         }
         // alias >> strip_ext >> dest >> target_file_name
-        if let Some(alias) = &cmd.alias {
-            cmd.dest.push(alias)
-        } 
-        else if let Some(dest) = dest {
-            // Remove extension, if applicable.
-            if cmd.strip_ext {
-                cmd.dest.push(dest.file_stem().unwrap());
-            } else {
-                cmd.dest.push(dest);
-            }
+        let dest = if let Some(alias) = &alias {
+            alias.to_owned()
         } else {
-            cmd.dest.push(cmd.target.file_name().unwrap());
-        }
+            // Get dest or file_name and remove extension, if applicable.
+            let dest: PathBuf = if let Some(dest) = dest {
+                dest
+            } else {
+                cmd.target.file_name().unwrap().into()
+            };
+
+            if cmd.strip_ext {
+                dest.file_stem().unwrap().into()
+            } else {
+                dest
+            }
+        };
+        cmd.dest.push(dest);
         printinfo!("Copy {target:#?} --> {dest:#?}", target = cmd.target, dest = cmd.dest);
         self.items.push(cmd);
+        return Ok(());
     }
     pub fn add_simple_item(&mut self, target: PathBuf, dest: PathBuf, perms:u32, overwrite: bool, strip_ext: bool) {
         //! Add item without using a toml file.
@@ -106,14 +124,13 @@ impl InstallationCmd {
             dest,
             perms,
             strip_ext,
-            alias: None,
             overwrite,
             comment: "".to_string(),
         };
         self.items.push(item);
     }
     pub fn add_dir(&mut self, dir: &str) -> Option<PathBuf> {
-        if let Some(path) = dirs::expand_mythos_shortcut(dir, "charon") {
+        if let Some(path) = dirs::expand_mythos_shortcut(dir, &self.name) {
             if !self.mkdirs.contains(&path) && !path.exists() {
                 printinfo!("Create directory: {path:#?}");
                 self.mkdirs.push(path.to_owned());

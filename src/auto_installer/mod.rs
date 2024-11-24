@@ -1,9 +1,11 @@
 mod install_item;
 mod installation_cmd;
 mod charon_io_error;
+mod charon_install_error;
 
 use std::{ffi::OsString, fs, path::PathBuf};
 
+use mythos_core::{printerror, printinfo};
 use toml::Value;
 
 #[derive(Debug)]
@@ -19,13 +21,21 @@ pub enum CharonIoError {
     InvalidInstallItem(String, usize),
     // invalid_target: PathBuf
     TargetFileNotFound(PathBuf, usize),
+    NoTargetProvided(usize),
+    UnknownUtilName,
 }
-
+#[derive(Debug)]
+pub enum CharonInstallError {
+    GenericIoError(std::io::Error),
+    DryRun,
+    BadPermissions(std::io::Error),
+    FileExistsNoOverwrite,
+}
 
 /**
  * A list of all items that must be installed.
  */
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct InstallationCmd {
     pub items: Vec<InstallItem>,
     pub mkdirs: Vec<PathBuf>,
@@ -41,7 +51,7 @@ pub struct InstallationCmd {
 /**
  * A single item to be installed.
  */
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstallItem {
     /// Path of item to be installed.
     pub target: PathBuf,
@@ -51,8 +61,6 @@ pub struct InstallItem {
     pub perms: u32,
     /// Remove extension from target file name.
     pub strip_ext: bool,
-    /// Optional name of installed file.
-    pub alias: Option<PathBuf>,
     /// Overwrite file if it already exists?
     pub overwrite: bool,
     /// Comments made during installation process. Used for logging.
@@ -64,13 +72,17 @@ pub struct InstallItem {
 /// Returns an error if charon file is invalid.
 pub fn parse_installation_file(path: &PathBuf) -> Result<InstallationCmd, CharonIoError> {
     let path = find_charon_file(path.to_path_buf())?;
+    printinfo!("Reading charon file at {path:?}");
 
-    let parent: PathBuf = path
+    let parent = path
         .parent()
         .unwrap_or(&std::path::Path::new(""))
         .to_path_buf()
-        .canonicalize()
-        .unwrap();
+        .canonicalize();
+    let parent: PathBuf = match parent {
+        Ok(parent) => parent,
+        Err(err) => return Err(CharonIoError::GenericIoError(err))
+    };
 
     let file = match fs::read_to_string(&path) {
         Ok(file) => file,
@@ -92,19 +104,30 @@ pub fn parse_installation_file(path: &PathBuf) -> Result<InstallationCmd, Charon
     };
 
     let mut cmd = InstallationCmd::new();
+    cmd.name = match parse_util_name(&path) {
+        Some(name) => name,
+        None => {
+            return Err(CharonIoError::UnknownUtilName);
+        }
+    };
+
+    // Start actually parsing file.
     for (i, (key, val)) in table.iter().enumerate() {
         let dest = match cmd.add_dir(&key) {
             Some(dest) => dest,
-            None => return Err(CharonIoError::InvalidDirKey(key.to_string(), i))
+            None => {
+                if key.to_lowercase() == "info" {
+                    cmd.set_info(&val);
+                    continue;
+                } 
+                return Err(CharonIoError::InvalidDirKey(key.to_string(), i));
+            }
         };
 
         if let toml::Value::Array(list) = val {
             for item in list {
-                cmd.add_item(&parent, &dest, &item);
+                cmd.add_item(&parent, &dest, &item, i)?;
             }
-        } 
-        else if let toml::Value::Table(_) = val {
-            cmd.set_info(&val);
         } else {
             return Err(CharonIoError::InvalidInstallItem(val.to_string(), i));
         }
@@ -143,8 +166,17 @@ fn find_charon_file(path: PathBuf) -> Result<PathBuf, CharonIoError> {
     return Err(CharonIoError::CharonFileNotFound);
 }
 
+fn parse_util_name(path: &PathBuf) -> Option<String> {
+    if path.extension()? == "charon" {
+        return Some(path.file_stem()?.to_string_lossy().to_string());
+    } 
+    return Some(path.parent()?.file_stem()?.to_string_lossy().to_string());
+}
+
 #[cfg(test)]
 mod tests {
+    use std::env;
+
     use super::*;
 
     #[test]
@@ -158,7 +190,6 @@ mod tests {
         println!("{res}");
         assert!(matches!(res, CharonIoError::CharonFileNotFound));
     }
-
     #[test]
     fn file_is_empty() {
         let res = parse_installation_file(&PathBuf::from("tests/find_charon_file/empty.charon")).unwrap_err();
@@ -183,5 +214,76 @@ mod tests {
         println!("{res}");
         assert!(matches!(res, CharonIoError::InvalidInstallItem(_, _)));
     }
+    #[test]
+    fn no_target_provided() {
+        let res = parse_installation_file(&PathBuf::from("tests/no_target_provided.charon")).unwrap_err();
+        println!("{res}");
+        assert!(matches!(res, CharonIoError::NoTargetProvided(_)));
+    }
+    #[test]
+    fn valid_charon_file() {
+        unsafe {
+            env::set_var("MYTHOS_CONFIG_DIR", "tests/valid/dests/etc");
+            env::set_var("MYTHOS_LOCAL_CONFIG_DIR", "tests/valid/dests/config");
+            env::set_var("MYTHOS_BIN_DIR", "tests/valid/dests/bin");
+            env::set_var("MYTHOS_DATA_DIR", "tests/valid/dests/data");
+        }
+        let items = vec![
+            // config = [ { target = "targets/config.conf" }]
+            InstallItem { 
+                target: PathBuf::from("tests/valid/targets/config.conf"), 
+                dest: PathBuf::from("tests/valid/dests/etc/valid/config.conf"), 
+                perms: 0,
+                strip_ext: false, 
+                overwrite: true, 
+                comment: String::new() 
+            },
+            InstallItem { 
+                target: PathBuf::from("tests/valid/targets/config.conf"), 
+                dest: PathBuf::from("tests/valid/dests/config/valid/config.conf"), 
+                perms: 0,
+                strip_ext: false, 
+                overwrite: false, 
+                comment: String::new() 
+            },
+            InstallItem { 
+                target: PathBuf::from("tests/valid/targets/1.txt"), 
+                dest: PathBuf::from("tests/valid/dests/data/valid/one.txt"), 
+                perms: 0,
+                strip_ext: false, 
+                overwrite: true, 
+                comment: String::new() 
+            },
+            InstallItem { 
+                target: PathBuf::from("tests/valid/targets/2.txt"), 
+                dest: PathBuf::from("tests/valid/dests/data/valid/2.txt"), 
+                perms: 0,
+                strip_ext: false, 
+                overwrite: true, 
+                comment: String::new() 
+            },
+            InstallItem { 
+                target: PathBuf::from("tests/valid/targets/executable.bin"), 
+                dest: PathBuf::from("tests/valid/dests/bin/executable"), 
+                perms: 0x755,
+                strip_ext: true, 
+                overwrite: true, 
+                comment: String::new() 
+            },
+        ];
 
+        let res = parse_installation_file(&PathBuf::from("tests/valid/valid.charon")).unwrap();
+        for item in res.items {
+            println!("{item:?}");
+            assert!(items.contains(&item));
+        }
+    }
+    #[test]
+    fn empty_dir_field() {
+        unsafe {
+            env::set_var("MYTHOS_DATA_DIR", "tests/valid/dests/data1");
+        }
+        let res = parse_installation_file(&PathBuf::from("tests/valid/empty_dir_field.charon")).unwrap();
+        assert_eq!(res.mkdirs, vec![PathBuf::from("tests/valid/dests/data1/empty_dir_field")])
+    }
 }
