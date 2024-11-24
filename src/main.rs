@@ -61,10 +61,11 @@ fn main() {
     let util_name = cmd.name.clone();
 
     // Install files.
-    printinfo!("Beginning installation.");
+    printinfo!("\nBeginning installation.");
     let new_charon_index = install(cmd, do_dry_run);
 
     // Load old charon file, if it exists.
+    printinfo!("\nReading index file.");
     let old_charon_index = match read_index(&util_name, do_dry_run) {
         Ok(file) => file,
         // Fails if fs error occurs.
@@ -77,7 +78,7 @@ fn main() {
 
     // Write (new) index.
     let charon_index_path = if do_dry_run {
-        PathBuf::from(format!("{util_name}"))
+        PathBuf::from(format!("{util_name}.dryrun.charon"))
     } else {
         match get_util_index_path(do_dry_run) {
             Some(path) => path.with_file_name(util_name).with_extension("charon"),
@@ -88,10 +89,14 @@ fn main() {
         }
     };
 
+    // TODO: Write to index.charon.
+
     if let Err(err) = fs::write(&charon_index_path, new_charon_index.join("\n")) {
         printerror!("An error occurred while writing charon file. Error = {err}.");
         return;
     }
+
+    
 
     printinfo!("Installation complete!");
 }

@@ -112,6 +112,7 @@ pub fn parse_installation_file(path: &PathBuf) -> Result<InstallationCmd, Charon
     };
 
     // Start actually parsing file.
+    printinfo!("\nInstallation Instructions:");
     for (i, (key, val)) in table.iter().enumerate() {
         let dest = match cmd.add_dir(&key) {
             Some(dest) => dest,
