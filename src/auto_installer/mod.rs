@@ -2,16 +2,18 @@ mod install_item;
 mod installation_cmd;
 mod charon_io_error;
 mod charon_install_error;
+pub mod main_index;
 
 use std::{ffi::OsString, fs, path::PathBuf};
 
-use mythos_core::{printerror, printinfo};
+use mythos_core::printinfo;
 use toml::Value;
 
 #[derive(Debug)]
 pub enum CharonIoError { 
     GenericIoError(std::io::Error),
-    TomlError(toml::de::Error),
+    TomlDeError(toml::de::Error),
+    TomlSerError(toml::ser::Error),
     CharonFileNotFound,
     CharonFileEmpty,
     InvalidCharonFile(String),
@@ -23,6 +25,7 @@ pub enum CharonIoError {
     TargetFileNotFound(PathBuf, usize),
     NoTargetProvided(usize),
     UnknownUtilName,
+    InfoSourceBad(PathBuf, std::io::Error),
 }
 #[derive(Debug)]
 pub enum CharonInstallError {
@@ -100,7 +103,7 @@ pub fn parse_installation_file(path: &PathBuf) -> Result<InstallationCmd, Charon
             let msg = format!("Expected a table, found {other:?}.");
             return Err(CharonIoError::InvalidCharonFile(msg));
         },
-        Err(err) => return Err(CharonIoError::TomlError(err)),
+        Err(err) => return Err(CharonIoError::TomlDeError(err)),
     };
 
     let mut cmd = InstallationCmd::new();
@@ -118,7 +121,7 @@ pub fn parse_installation_file(path: &PathBuf) -> Result<InstallationCmd, Charon
             Some(dest) => dest,
             None => {
                 if key.to_lowercase() == "info" {
-                    cmd.set_info(&val);
+                    cmd.set_info(&val)?;
                     continue;
                 } 
                 return Err(CharonIoError::InvalidDirKey(key.to_string(), i));
@@ -179,6 +182,7 @@ mod tests {
     use std::env;
 
     use serial_test::serial;
+    use toml::map::Map;
 
     use super::*;
 
@@ -203,7 +207,7 @@ mod tests {
     fn charon_file_not_valid_toml() {
         let res = parse_installation_file(&PathBuf::from("tests/not_toml.charon")).unwrap_err();
         println!("{res}");
-        assert!(matches!(res, CharonIoError::TomlError(_)));
+        assert!(matches!(res, CharonIoError::TomlDeError(_)));
     }
     #[test]
     fn charon_file_invalid_dir_key() {
@@ -277,9 +281,12 @@ mod tests {
         ];
 
         let res = parse_installation_file(&PathBuf::from("tests/valid/valid.charon")).unwrap();
+        println!("----------------------------------------------------");
+        println!("{items:?}");
         for item in res.items {
             println!("{item:?}");
             assert!(items.contains(&item));
+            println!("----------------------------------------------------");
         }
     }
     #[serial]
@@ -290,5 +297,18 @@ mod tests {
         }
         let res = parse_installation_file(&PathBuf::from("tests/valid/empty_dir_field.charon")).unwrap();
         assert_eq!(res.mkdirs, vec![PathBuf::from("tests/valid/dests/data1/empty_dir_field")])
+    }
+    #[test]
+    fn write_main_index() {
+        let mut cmd = InstallationCmd::new();
+        let mut info = Map::new();
+
+        info.insert("version".into(), Value::String("0.0.2".into()));
+        cmd.name = "a".into();
+        cmd.set_info(&Value::Table(info)).unwrap();
+
+        let index = main_index::update(PathBuf::from("tests/valid/dests/data/main_index/"), &cmd, false).unwrap();
+        assert_eq!(index, "[a]\nversion = \"0.0.2\"\n\n[b]\nversion = \"0.0.2\"\n\n[c]\nversion = \"0.0.3\"\n");
+
     }
 }

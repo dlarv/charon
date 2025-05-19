@@ -1,4 +1,4 @@
-info = { version = "1.0.0", description = "Basic installer utility" }
+info = { version = "1.0.0", description = "Basic installer utility", source = "." }
 bin = [
 	{ target = "target/debug/charon", alias = "charon", perms = 0x755 },
 ]

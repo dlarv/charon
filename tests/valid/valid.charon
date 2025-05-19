@@ -1,4 +1,4 @@
-info = { name = "Valid" }
+info = { name = "valid" }
 
 config = [ { target = "tests/valid/targets/config.conf" }]
 localconfig = [ { target = "tests/valid/targets/config.conf", overwrite = false }]

@@ -5,7 +5,7 @@
 
 use std::{env, fs, path::PathBuf};
 
-use auto_installer::{parse_installation_file, InstallationCmd};
+use auto_installer::{parse_installation_file, InstallationCmd, main_index};
 use mythos_core::{cli::clean_cli_args, dirs, printerror, printinfo};
 
 
@@ -50,7 +50,7 @@ fn main() {
     };
     // Find valid .charon file.
     // Parse .charon file => InstallationCmd.
-    let cmd = match parse_installation_file(&path) {
+    let mut cmd = match parse_installation_file(&path) {
         Ok(cmd) => cmd,
         Err(err) => {
             printerror!("{err}");
@@ -62,7 +62,7 @@ fn main() {
 
     // Install files.
     printinfo!("\nBeginning installation.");
-    let new_charon_index = install(cmd, do_dry_run);
+    let new_charon_index = install(&mut cmd, do_dry_run);
 
     // Load old charon file, if it exists.
     let old_charon_index = match read_util_index(&util_name, do_dry_run) {
@@ -91,10 +91,23 @@ fn main() {
         }
     };
 
-    // TODO: Write to index.charon.
 
-    println!("\nUpdating index file: {charon_index_path:?}");
+    println!("\nUpdating util index file: {charon_index_path:?}");
     if let Err(err) = fs::write(&charon_index_path, new_charon_index.join("\n")) {
+        printerror!("An error occurred while writing charon file. Error = {err}.");
+        return;
+    }
+
+    println!("\nUpdating main index file");
+    let main_index_path = match get_util_index_path(do_dry_run) {
+        Some(path) => path,
+        None => {
+            printerror!("An error occured while fetching index.charon");
+            return;
+        }
+    };
+
+    if let Err(err) = main_index::update(main_index_path, &mut cmd, do_dry_run) {
         printerror!("An error occurred while writing charon file. Error = {err}.");
         return;
     }
@@ -102,11 +115,11 @@ fn main() {
     printinfo!("Installation complete!");
 }
 
-fn install(cmd: InstallationCmd, do_dry_run: bool) -> Vec<String> {
+fn install(cmd: &mut InstallationCmd, do_dry_run: bool) -> Vec<String> {
     let mut charon_index: Vec<String> = Vec::new();
 
     charon_index.push("# Directories".to_string());
-    for dir in cmd.mkdirs {
+    for dir in &cmd.mkdirs {
         charon_index.push(dir.to_string_lossy().to_string());
 
         if dir.exists() {
@@ -125,7 +138,7 @@ fn install(cmd: InstallationCmd, do_dry_run: bool) -> Vec<String> {
     }
 
     charon_index.push("# Files".to_string());
-    for mut item in cmd.items {
+    for item in &mut cmd.items {
         printinfo!("Installing {:?} --> {:?}", item.target, item.dest);
 
         if let Err(err) = item.try_install(do_dry_run) {
@@ -133,7 +146,7 @@ fn install(cmd: InstallationCmd, do_dry_run: bool) -> Vec<String> {
         }
         printinfo!("{}", item.comment);
         charon_index.push(item.print_dest());
-        charon_index.push(item.comment);
+        charon_index.push(item.comment.clone());
 
     }
     return charon_index;
@@ -161,7 +174,7 @@ fn get_util_index_path(do_dry_run: bool) -> Option<PathBuf> {
 }
 
 fn read_util_index(util_name: &str, do_dry_run: bool) -> Result<Vec<String>, ()> {
-    //! Read file inside $MYTHOS_DATA_DIR/$util_name.charon
+    //! Read file inside $MYTHOS_DATA_DIR/charon/$util_name.charon
     // make_dir works the same as get_path, except it creates the dir if it dne.
     let mut path = match get_util_index_path(do_dry_run) {
         Some(path) => path,
@@ -222,6 +235,7 @@ fn process_orphans(old_index: Vec<String>, new_index: &Vec<String>, do_dry_run: 
     return orphans;
 }
 
+
 fn uninstall(util: Option<String>) {
 
 }
@@ -245,8 +259,8 @@ mod tests {
     #[test]
     fn overwrite() {
         setup1();
-        let cmd = parse_installation_file(&PathBuf::from("tests/main/overwrite.charon")).unwrap();
-        let res = install(cmd, false);
+        let mut cmd = parse_installation_file(&PathBuf::from("tests/main/overwrite.charon")).unwrap();
+        let res = install(&mut cmd, false);
 
         let mut counter = 0;
         for item in res {
@@ -276,8 +290,8 @@ mod tests {
     fn remove_orphans() {
         setup1();
         let old_index = read_util_index("orphan_test", true).unwrap();
-        let cmd = parse_installation_file(&PathBuf::from("tests/main/orphan_test.charon")).unwrap();
-        let new_index = install(cmd, true);
+        let mut cmd = parse_installation_file(&PathBuf::from("tests/main/orphan_test.charon")).unwrap();
+        let new_index = install(&mut cmd, true);
 
         println!("{new_index:?}");
         println!("{old_index:?}");

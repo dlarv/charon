@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{env::current_dir, path::PathBuf};
 
 use mythos_core::{dirs, printinfo};
 use toml::Value;
@@ -18,7 +18,7 @@ impl InstallationCmd {
             description: None,
         };
     }
-    pub fn set_info(&mut self, val: &Value) {
+    pub fn set_info(&mut self, val: &Value) -> Result<(), CharonIoError> {
         //! Get version, description, source, etc from info section of a .charon file.
         if let Some(Value::String(val)) = val.get("name") {
             self.name = val.to_string();
@@ -30,8 +30,9 @@ impl InstallationCmd {
             self.description = Some(val.to_string());
         }
         if let Some(Value::String(val)) = val.get("source") {
-            self.source = Some(val.to_string());
+            self.source = Some(validate(val)?);
         }
+        return Ok(());
     }
     pub fn add_item(&mut self, parent: &PathBuf, dest: &PathBuf, val: &Value, line_num: usize) -> Result<(), CharonIoError>{
         //! Returns Ok if install item was added correctly.
@@ -156,4 +157,23 @@ impl InstallationCmd {
         return output;
     }
 }
+
+/// If user provided relative file path, expand it.
+fn validate(path: &str) -> Result<String, CharonIoError> {
+    if path == "." {
+        return match current_dir() {
+            Ok(path) => Ok(path.to_string_lossy().to_string()),
+            Err(err) => Err(CharonIoError::InfoSourceBad(path.into(), err))
+        }
+    }
+    let p = PathBuf::from(path);
+    if p.exists() && p.is_relative() {
+        return match p.canonicalize() {
+            Ok(path) => Ok(path.to_string_lossy().to_string()),
+            Err(err) => Err(CharonIoError::InfoSourceBad(p, err))
+        }
+    }
+    return Ok(path.to_string());
+}
+
 
