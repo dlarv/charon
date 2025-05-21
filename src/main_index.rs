@@ -58,9 +58,9 @@ pub fn list_main_index(be_verbose: bool) {
         }
     };
     let func = if be_verbose {
-        verbose_print
+        print_verbose
     } else {
-        non_verbose_print
+        print_simple
     };
 
     for (key, val) in table {
@@ -68,7 +68,7 @@ pub fn list_main_index(be_verbose: bool) {
     }
 }
 
-fn verbose_print(key: String, value: Value) {
+fn print_verbose(key: String, value: Value) {
     let mut msg = format!("{key}\t\t");
 
     let table = match value {
@@ -86,7 +86,7 @@ fn verbose_print(key: String, value: Value) {
     printinfo!("{msg}");
 }
 
-fn non_verbose_print(key: String, _value: Value) {
+fn print_simple(key: String, _value: Value) {
     printinfo!("{key}");
 }
 
