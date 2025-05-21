@@ -5,11 +5,12 @@
 
 use std::{env, fs, path::PathBuf};
 
-use auto_installer::{parse_installation_file, InstallationCmd, main_index};
-use mythos_core::{cli::clean_cli_args, dirs, printerror, printinfo};
-
-
 mod auto_installer;
+mod uninstaller;
+mod main_index;
+
+use auto_installer::{parse_installation_file, CharonIoError, InstallationCmd};
+use mythos_core::{cli::clean_cli_args, dirs, printerror, printinfo};
 
 fn main() {
     let mut do_dry_run = false;
@@ -18,14 +19,12 @@ fn main() {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "-h" | "--help" => {
-                println!("charon [opts] [path]\nBasic installer util that can use toml files to quickly install programs.\nopts:\n-h | --help\t\tPrint this menu\n-n | --dryrun\t\tRun command without making changes to filesystem\n-U | --uninstall\t\tBegin uninstallation process.\n-c | --create\t\tCreate a basic charon file");
+                println!("charon [opts] [path]|[utils...]\nBasic installer util that can use toml files to quickly install programs.\nopts:\n-h | --help\t\tPrint this menu\n-n | --dryrun\t\tRun command without making changes to filesystem\n-U | --uninstall\t\tBegin uninstallation process.\n-r | --remove\t\tDeletes all files installed by mythos utils. The util must have been installed using charon.");
                 return;
             },
             "-n" | "--dryrun" => do_dry_run = true,
-            "-c" | "--create" => {
-            },
-            "-U" | "--uninstall" => {
-                uninstall(args.next());
+            "-r" | "--remove" => {
+                uninstall(args, do_dry_run);
                 return;
             },
             _ => {
@@ -80,11 +79,11 @@ fn main() {
         PathBuf::from(format!("{util_name}.dryrun.charon"))
     } else {
         match get_util_index_path(do_dry_run) {
-            Some(mut path) => {
+            Ok(mut path) => {
                 path.push(util_name + ".charon");
                 path
             },
-            None => {
+            Err(_) => {
                 printerror!("Due to an error while trying to access util index, index file was saved as if this were a dryrun.");
                 PathBuf::from(format!("{util_name}.dryrun.charon"))
             }
@@ -100,14 +99,13 @@ fn main() {
 
     println!("\nUpdating main index file");
     let main_index_path = match get_util_index_path(do_dry_run) {
-        Some(path) => path,
-        None => {
+        Ok(path) => path,
+        Err(_) => {
             printerror!("An error occured while fetching index.charon");
             return;
         }
     };
-
-    if let Err(err) = main_index::update(main_index_path, &mut cmd, do_dry_run) {
+    if let Err(err) = main_index::update(&mut cmd, do_dry_run) {
         printerror!("An error occurred while writing charon file. Error = {err}.");
         return;
     }
@@ -152,7 +150,7 @@ fn install(cmd: &mut InstallationCmd, do_dry_run: bool) -> Vec<String> {
     return charon_index;
 }
 
-fn get_util_index_path(do_dry_run: bool) -> Option<PathBuf> {
+fn get_util_index_path(do_dry_run: bool) -> Result<PathBuf, CharonIoError> {
     let path = dirs::expand_path(dirs::MythosDir::Data, "charon");
 
     if path.exists() { }
@@ -162,23 +160,23 @@ fn get_util_index_path(do_dry_run: bool) -> Option<PathBuf> {
     else {
         printinfo!("$MYTHOS_DATA_DIR/charon/ does not exists, making it now...");
         match dirs::make_dir(dirs::MythosDir::Data, "charon") {
-            Ok(path) => return Some(path),
+            Ok(path) => return Ok(path),
             Err(err) => {
                 printerror!("An error occurred while trying to mkdir. Error = {err}.");
-                return None;
+                return Err(CharonIoError::GenericIoError(err));
             }
         }
     }
 
-    return Some(path);
+    return Ok(path);
 }
 
 fn read_util_index(util_name: &str, do_dry_run: bool) -> Result<Vec<String>, ()> {
     //! Read file inside $MYTHOS_DATA_DIR/charon/$util_name.charon
     // make_dir works the same as get_path, except it creates the dir if it dne.
     let mut path = match get_util_index_path(do_dry_run) {
-        Some(path) => path,
-        None => {
+        Ok(path) => path,
+        Err(_) => {
             return Err(());
         }
     };
@@ -236,8 +234,25 @@ fn process_orphans(old_index: Vec<String>, new_index: &Vec<String>, do_dry_run: 
 }
 
 
-fn uninstall(util: Option<String>) {
-
+fn uninstall<T: Iterator<Item = String>>(mut utils: T, mut do_dry_run: bool) {
+    // Find corresponding charon files.
+    // Delete files listed in charon files.
+    // If any directories are completely empty, delete them too.
+    // Remove utils from main index.
+    let mut pkgs: Vec<String> = Vec::new();
+    
+    while let Some(util) = utils.next() {
+        match util.as_str() {
+            "-n" | "--dryrun" => do_dry_run = true,
+            _ => {
+                if util.starts_with("-") {
+                    continue;
+                }
+                pkgs.push(util);
+            }
+        }
+    }
+    uninstaller::uninstall_utils(pkgs, do_dry_run);
 }
 
 #[cfg(test)]
@@ -302,9 +317,6 @@ mod tests {
         assert!(orphans.contains(&PathBuf::from("tests/main/dests/data/orphan_test/Orphan2")));
         assert!(orphans.contains(&PathBuf::from("tests/main/dests/data/orphan_test/Orphan3/Item1")));
         assert_eq!(orphans.len(), 3);
-    }
-    #[test]
-    fn uninstall() {
     }
 }
 

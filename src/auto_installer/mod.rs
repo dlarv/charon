@@ -2,7 +2,6 @@ mod install_item;
 mod installation_cmd;
 mod charon_io_error;
 mod charon_install_error;
-pub mod main_index;
 
 use std::{ffi::OsString, fs, path::PathBuf};
 
@@ -24,7 +23,7 @@ pub enum CharonIoError {
     // invalid_target: PathBuf
     TargetFileNotFound(PathBuf, usize),
     NoTargetProvided(usize),
-    UnknownUtilName,
+    UnknownUtilName(Option<String>),
     InfoSourceBad(PathBuf, std::io::Error),
 }
 #[derive(Debug)]
@@ -110,8 +109,7 @@ pub fn parse_installation_file(path: &PathBuf) -> Result<InstallationCmd, Charon
     cmd.name = match parse_util_name(&path) {
         Some(name) => name,
         None => {
-            return Err(CharonIoError::UnknownUtilName);
-        }
+            return Err(CharonIoError::UnknownUtilName(None)); }
     };
 
     // Start actually parsing file.
@@ -185,6 +183,7 @@ mod tests {
     use toml::map::Map;
 
     use super::*;
+    use crate::main_index;
 
     #[test]
     fn find_charon_file_given_dir() {
@@ -298,8 +297,12 @@ mod tests {
         let res = parse_installation_file(&PathBuf::from("tests/valid/empty_dir_field.charon")).unwrap();
         assert_eq!(res.mkdirs, vec![PathBuf::from("tests/valid/dests/data1/empty_dir_field")])
     }
+    #[serial]
     #[test]
     fn write_main_index() {
+        unsafe {
+            env::set_var("MYTHOS_DATA_DIR", "tests/valid/dests/data/main_index/");
+        }
         let mut cmd = InstallationCmd::new();
         let mut info = Map::new();
 
@@ -307,7 +310,7 @@ mod tests {
         cmd.name = "a".into();
         cmd.set_info(&Value::Table(info)).unwrap();
 
-        let index = main_index::update(PathBuf::from("tests/valid/dests/data/main_index/"), &cmd, false).unwrap();
+        let index = main_index::update(&cmd, false).unwrap();
         assert_eq!(index, "[a]\nversion = \"0.0.2\"\n\n[b]\nversion = \"0.0.2\"\n\n[c]\nversion = \"0.0.3\"\n");
 
     }

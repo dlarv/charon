@@ -15,7 +15,8 @@ impl Display for CharonIoError {
             CharonIoError::GenericIoError(err) => write!(f, "Error reading Charon file. Error = {err:?}"),
             CharonIoError::InvalidCharonFile(msg) => write!(f, "{msg}."),
             CharonIoError::NoTargetProvided(i) => write!(f, "Installation item without a target on line {i}."),
-            CharonIoError::UnknownUtilName => write!(f, "Could not obtain util name from either charon file or $CWD."),
+            CharonIoError::UnknownUtilName(Some(util)) => write!(f, "Unknown util {util}."),
+            CharonIoError::UnknownUtilName(None) => write!(f, "Could not obtain util name from either charon file or $CWD."),
             CharonIoError::InfoSourceBad(path, err) => write!(f, "Tried to interpret source path provided in info field as relative path, but canonicalization failed. SourcePath = {path:?} Error = {err:?}"),
         };
     }

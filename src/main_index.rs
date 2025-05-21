@@ -4,9 +4,10 @@ use crate::auto_installer::CharonIoError;
 use super::InstallationCmd;
 
 
-pub fn update(root_path: PathBuf, cmd: &InstallationCmd, do_dry_run: bool) -> Result<String, CharonIoError> {
+pub fn update(cmd: &InstallationCmd, do_dry_run: bool) -> Result<String, CharonIoError> {
     // Keep a master list of all util info, mostly their version and source.
     // This will be used to do system updates.
+    let root_path = crate::get_util_index_path(do_dry_run)?;
     let path = root_path.join("index.charon");
 
     let file = match fs::read_to_string(&path) {
