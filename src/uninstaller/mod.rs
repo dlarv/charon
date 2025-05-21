@@ -1,5 +1,5 @@
 use std::{fs::{self}, path::PathBuf};
-
+use crate::main_index;
 use mythos_core::{dirs::{get_path, MythosDir}, printerror, printinfo, printwarn};
 use crate::auto_installer::CharonIoError;
 
@@ -39,7 +39,27 @@ pub fn uninstall_utils(utils: Vec<String>, do_dry_run: bool) {
     remove_files(files, do_dry_run);
 
     // Remove utils from main index.
-    update_main_index(utils);
+    if !do_dry_run {
+        let index = match main_index::update_main_index(utils) {
+            Ok(index) => index,
+            Err(err) => {
+                printerror!("{err}");
+                return;
+            }
+        };
+
+        let root_path = match crate::get_util_index_path(do_dry_run) {
+            Ok(path) => path,
+            Err(err) => {
+                printerror!("{err}");
+                return;
+            }
+        };
+        let path = root_path.join("index.charon");
+        if let Err(err) = fs::write(path, &index) {
+            printerror!("{err}");
+        }
+    }
 }
 
 fn find_files(util_name: &str, path: &PathBuf) -> Result<Vec<PathBuf>, CharonIoError> {
@@ -138,11 +158,11 @@ fn remove_dir_if_empty(path: &PathBuf, do_dry_run: bool) -> Option<PathBuf> {
     return None;
 }
 
-fn update_main_index(utils: Vec<String>) {
-}
 
 #[cfg(test)]
 mod tests {
+    use std::env;
+
     use serial_test::serial;
     use super::*;
 
@@ -189,5 +209,15 @@ mod tests {
             PathBuf::from("tests/uninstall/mythos/data/b"), 
             PathBuf::from("tests/uninstall/mythos/data/"), 
         ]);
+    }
+
+    #[serial]
+    #[test]
+    fn test_update_main_index() {
+        unsafe {
+            env::set_var("MYTHOS_DATA_DIR", "tests/uninstall/");
+        }
+        let index = main_index::update_main_index(vec!["a".into(), "b".into()]).unwrap();
+        assert_eq!(index, "[c]\nversion = \"0.0.3\"\n");
     }
 }

@@ -19,13 +19,16 @@ fn main() {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "-h" | "--help" => {
-                println!("charon [opts] [path]|[utils...]\nBasic installer util that can use toml files to quickly install programs.\nopts:\n-h | --help\t\tPrint this menu\n-n | --dryrun\t\tRun command without making changes to filesystem\n-r | --remove\t\tDeletes all files installed by mythos utils. The util must have been installed using charon.");
+                println!("charon [opts] [path]|[utils...]\nBasic installer util that can use toml files to quickly install programs.\nopts:\n-h | --help\t\tPrint this menu\n-n | --dryrun\t\tRun command without making changes to filesystem\n-r | --remove\t\tDeletes all files installed by mythos utils. The util must have been installed using charon.\n\n-l | --list\t\tShow list of utils installed using charon.");
                 return;
             },
             "-n" | "--dryrun" => do_dry_run = true,
             "-r" | "--remove" => {
                 uninstall(args, do_dry_run);
                 return;
+            },
+            "-l" | "--list" => {
+                list_main_index();
             },
             _ => {
                 if arg.starts_with("-") {
@@ -98,19 +101,16 @@ fn main() {
     }
 
     println!("\nUpdating main index file");
-    let main_index_path = match get_util_index_path(do_dry_run) {
-        Ok(path) => path,
-        Err(_) => {
-            printerror!("An error occured while fetching index.charon");
-            return;
-        }
-    };
     if let Err(err) = main_index::update(&mut cmd, do_dry_run) {
         printerror!("An error occurred while writing charon file. Error = {err}.");
         return;
     }
 
     printinfo!("Installation complete!");
+}
+
+fn list_main_index() {
+    todo!()
 }
 
 fn install(cmd: &mut InstallationCmd, do_dry_run: bool) -> Vec<String> {
