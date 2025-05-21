@@ -28,7 +28,8 @@ fn main() {
                 return;
             },
             "-l" | "--list" => {
-                list_main_index();
+                main_index::list_main_index(false);
+                return
             },
             _ => {
                 if arg.starts_with("-") {
@@ -109,9 +110,6 @@ fn main() {
     printinfo!("Installation complete!");
 }
 
-fn list_main_index() {
-    todo!()
-}
 
 fn install(cmd: &mut InstallationCmd, do_dry_run: bool) -> Vec<String> {
     let mut charon_index: Vec<String> = Vec::new();
