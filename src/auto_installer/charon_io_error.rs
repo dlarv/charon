@@ -17,7 +17,13 @@ impl Display for CharonIoError {
             CharonIoError::NoTargetProvided(i) => write!(f, "Installation item without a target on line {i}."),
             CharonIoError::UnknownUtilName(Some(util)) => write!(f, "Unknown util {util}."),
             CharonIoError::UnknownUtilName(None) => write!(f, "Could not obtain util name from either charon file or $CWD."),
-            CharonIoError::InfoSourceBad(path, err) => write!(f, "Tried to interpret source path provided in info field as relative path, but canonicalization failed. SourcePath = {path:?} Error = {err:?}"),
+            CharonIoError::InfoSourceBad(path) => write!(f, "Tried to interpret source path provided in info field as relative path, but canonicalization failed. SourcePath = {path:?}."),
         };
+    }
+}
+
+impl From<std::io::Error> for CharonIoError {
+    fn from(value: std::io::Error) -> Self {
+        return CharonIoError::GenericIoError(value);
     }
 }

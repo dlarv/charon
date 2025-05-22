@@ -23,13 +23,9 @@ pub fn update(cmd: &InstallationCmd, do_dry_run: bool) -> Result<String, CharonI
     let path = root_path.join("index.charon");
     if do_dry_run {
         let path = root_path.with_file_name("index.dry_run.charon");
-        if let Err(err) = fs::write(path, &output) {
-            return Err(CharonIoError::GenericIoError(err));
-        }
+        fs::write(path, &output)?;
     } else {
-        if let Err(err) = fs::write(path, &output) {
-            return Err(CharonIoError::GenericIoError(err));
-        }
+        fs::write(path, &output)?;
     }
     
     return Ok(output);

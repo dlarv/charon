@@ -24,7 +24,7 @@ pub enum CharonIoError {
     TargetFileNotFound(PathBuf, usize),
     NoTargetProvided(usize),
     UnknownUtilName(Option<String>),
-    InfoSourceBad(PathBuf, std::io::Error),
+    InfoSourceBad(PathBuf),
 }
 #[derive(Debug)]
 pub enum CharonInstallError {
@@ -119,7 +119,7 @@ pub fn parse_installation_file(path: &PathBuf) -> Result<InstallationCmd, Charon
             Some(dest) => dest,
             None => {
                 if key.to_lowercase() == "info" {
-                    cmd.set_info(&val)?;
+                    cmd.set_info(&val, &path)?;
                     continue;
                 } 
                 return Err(CharonIoError::InvalidDirKey(key.to_string(), i));
@@ -308,7 +308,7 @@ mod tests {
 
         info.insert("version".into(), Value::String("0.0.2".into()));
         cmd.name = "a".into();
-        cmd.set_info(&Value::Table(info)).unwrap();
+        cmd.set_info(&Value::Table(info), &PathBuf::from("")).unwrap();
 
         let index = main_index::update(&cmd, false).unwrap();
         assert_eq!(index, "[a]\nversion = \"0.0.2\"\n\n[b]\nversion = \"0.0.2\"\n\n[c]\nversion = \"0.0.3\"\n");
