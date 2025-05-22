@@ -4,6 +4,7 @@ use toml::{map::Map, Value};
 use crate::auto_installer::CharonIoError;
 use super::InstallationCmd;
 
+pub enum ListMode { Simple, Verbose, Source }
 
 pub fn update(cmd: &InstallationCmd, do_dry_run: bool) -> Result<String, CharonIoError> {
     // Keep a master list of all util info, mostly their version and source.
@@ -49,7 +50,7 @@ pub fn update_main_index(utils: Vec<String>) -> Result<String, CharonIoError> {
     };
 }
 
-pub fn list_main_index(be_verbose: bool) {
+pub fn list_main_index(mode: ListMode) {
     let table = match load_main_index(true) {
         Ok(t) => t,
         Err(_) => {
@@ -57,12 +58,17 @@ pub fn list_main_index(be_verbose: bool) {
             return;
         }
     };
-    let func = if be_verbose {
-        println!("Name\t\tVersion\t\tDescription");
-        print_verbose
-    } else {
-        print_simple
-    };
+    let func = match mode {
+        ListMode::Verbose => {
+            println!("Name\t\tVersion\t\tDescription");
+            print_verbose
+        },
+        ListMode::Simple => print_simple,
+        ListMode::Source => {
+            println!("Name\t\tSource");
+            print_source
+        }
+    };     
 
     for (key, val) in table {
         func(key, val);
@@ -95,6 +101,23 @@ fn print_verbose(key: String, value: Value) {
 
 fn print_simple(key: String, _value: Value) {
     printinfo!("{key}");
+}
+
+fn print_source(key: String, value: Value) {
+    let mut msg = format!("{key}\t\t");
+
+    let table = match value {
+        Value::Table(t) => t,
+        _ => {
+            printinfo!("{msg}");
+            return;
+        }
+    };
+
+    if table.contains_key("source") {
+        msg += &format!("{}", table.get("source").unwrap().to_string());
+    }
+    printinfo!("{msg}");
 }
 
 fn load_main_index(do_dry_run: bool) -> Result<Map<String, Value>, CharonIoError> {
