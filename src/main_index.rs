@@ -52,12 +52,13 @@ pub fn update_main_index(utils: Vec<String>) -> Result<String, CharonIoError> {
 pub fn list_main_index(be_verbose: bool) {
     let table = match load_main_index(true) {
         Ok(t) => t,
-        Err(err) => {
+        Err(_) => {
             printinfo!("No utils installed...");
             return;
         }
     };
     let func = if be_verbose {
+        println!("Name\t\tVersion\t\tDescription");
         print_verbose
     } else {
         print_simple
@@ -80,8 +81,14 @@ fn print_verbose(key: String, value: Value) {
     };
 
     if table.contains_key("version") {
-        msg += &format!("{:?}", table.get("version"));
+        msg += &format!("{}", table.get("version").unwrap().to_string());
+        msg += "\t";
     }
+    msg += "\t";
+    if table.contains_key("description") {
+        msg += &format!("{}", table.get("description").unwrap().to_string());
+    }
+
 
     printinfo!("{msg}");
 }
