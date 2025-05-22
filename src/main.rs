@@ -19,7 +19,7 @@ fn main() {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "-h" | "--help" => {
-                println!("charon [opts] [path]|[utils...]\nBasic installer util that can use toml files to quickly install programs.\nopts:\n-h | --help\t\tPrint this menu\n-n | --dryrun\t\tRun command without making changes to filesystem\n-r | --remove\t\tDeletes all files installed by mythos utils. The util must have been installed using charon.\n\n-l | --list\t\tShow list of utils installed using charon.\n-L\t\t\tLike -l, but more verbose.\n--src\t\t\tLike -l, but show sources as well.");
+                println!("charon [opts] [path]|[utils...]\nBasic installer util that can use toml files to quickly install programs.\nopts:\n-h | --help\t\tPrint this menu.\n-n | --dryrun\t\tRun command without making changes to filesystem.\n-r | --remove\t\tDeletes all files installed by mythos utils. The util must have been installed using charon.\n\n-l | --list\t\tShow list of utils installed using charon.\n-L\t\t\tLike -l, but more verbose.\n--src\t\t\tLike -l, but show sources as well.");
                 return;
             },
             "-n" | "--dryrun" => do_dry_run = true,
