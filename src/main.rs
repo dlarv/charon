@@ -8,6 +8,7 @@ use std::{env, fs, path::PathBuf};
 mod auto_installer;
 mod uninstaller;
 mod main_index;
+mod updater;
 
 use auto_installer::{parse_installation_file, CharonIoError, InstallationCmd};
 use mythos_core::{cli::clean_cli_args, dirs, printerror, printinfo};

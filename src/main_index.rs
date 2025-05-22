@@ -116,7 +116,7 @@ fn print_source(key: String, value: Value) {
     printinfo!("{msg}");
 }
 
-fn load_main_index(do_dry_run: bool) -> Result<Map<String, Value>, CharonIoError> {
+pub fn load_main_index(do_dry_run: bool) -> Result<Map<String, Value>, CharonIoError> {
     // Keep a master list of all util info, mostly their version and source.
     // This will be used to do system updates.
     let root_path = crate::get_util_index_path(do_dry_run)?;
