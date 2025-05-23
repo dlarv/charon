@@ -155,6 +155,9 @@ fn get_info_from_cmd(cmd: &InstallationCmd) -> Value {
     if let Some(source) = &cmd.source {
         output.insert("source".into(), Value::String(source.to_string()));
     }
+    if let Some(desc) = &cmd.description {
+        output.insert("description".into(), Value::String(desc.to_string()));
+    }
 
     return Value::Table(output);
 }
