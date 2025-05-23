@@ -20,7 +20,7 @@ fn main() {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "-h" | "--help" => {
-                println!("charon [opts] [path]|[utils...]\nBasic installer util that can use toml files to quickly install programs.\nopts:\n-h | --help\t\tPrint this menu.\n-n | --dryrun\t\tRun command without making changes to filesystem.\n-r | --remove\t\tDeletes all files installed by mythos utils. The util must have been installed using charon.\n\n-l | --list\t\tShow list of utils installed using charon.\n-L\t\t\tLike -l, but more verbose.\n--src\t\t\tLike -l, but show sources as well.");
+                println!("charon [opts] [path]|[utils...]\nBasic installer util that can use toml files to quickly install programs.\nopts:\n-h | --help\t\tPrint this menu.\n-n | --dryrun\t\tRun command without making changes to filesystem.\n-r | --remove\t\tDeletes all files installed by mythos utils. The util must have been installed using charon.\n-u | --update\t\tUsing the source paths provided in index.charon, check if any utils can be updated.\n-U | --force-update\tForce update. Takes a list of utils which have been installed using charon.\n-l | --list\t\tShow list of utils installed using charon.\n-L\t\t\tLike -l, but more verbose.\n--src\t\t\tLike -l, but show sources as well.");
                 return;
             },
             "-n" | "--dryrun" => do_dry_run = true,
@@ -30,15 +30,27 @@ fn main() {
             },
             "-l" | "--list" => {
                 main_index::list_main_index(main_index::ListMode::Simple);
-                return
+                return;
             },
             "-L" => {
                 main_index::list_main_index(main_index::ListMode::Verbose);
-                return
+                return;
             },
             "--src" => {
                 main_index::list_main_index(main_index::ListMode::Source);
-                return
+                return;
+            },
+            "-u" | "--update" => {
+                if let Err(err) = updater::update(do_dry_run) {
+                    printerror!("{err}");
+                }
+                return;
+            },
+            "-U" | "--force-update" => {
+                if let Err(err) = updater::force_update(args, do_dry_run) {
+                    printerror!("{err}");
+                }
+                return;
             },
             _ => {
                 if arg.starts_with("-") {
